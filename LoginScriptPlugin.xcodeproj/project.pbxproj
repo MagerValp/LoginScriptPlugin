@@ -6,9 +6,17 @@
 	objectVersion = 46;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0556E1D11A1F820100F3421E /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0556E1D01A1F820100F3421E /* Security.framework */; };
+		0556E1D51A1F824900F3421E /* LoginScriptPlugin.c in Sources */ = {isa = PBXBuildFile; fileRef = 0556E1D31A1F824900F3421E /* LoginScriptPlugin.c */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		0556E1C61A1F812400F3421E /* LoginScriptPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LoginScriptPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		0556E1CA1A1F812400F3421E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		0556E1D01A1F820100F3421E /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		0556E1D31A1F824900F3421E /* LoginScriptPlugin.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = LoginScriptPlugin.c; sourceTree = "<group>"; };
+		0556E1D41A1F824900F3421E /* LoginScriptPlugin.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = LoginScriptPlugin.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -16,6 +24,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0556E1D11A1F820100F3421E /* Security.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -26,6 +35,7 @@
 			isa = PBXGroup;
 			children = (
 				0556E1C81A1F812400F3421E /* LoginScriptPlugin */,
+				0556E1D21A1F820B00F3421E /* Frameworks */,
 				0556E1C71A1F812400F3421E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -42,6 +52,8 @@
 			isa = PBXGroup;
 			children = (
 				0556E1C91A1F812400F3421E /* Supporting Files */,
+				0556E1D31A1F824900F3421E /* LoginScriptPlugin.c */,
+				0556E1D41A1F824900F3421E /* LoginScriptPlugin.h */,
 			);
 			path = LoginScriptPlugin;
 			sourceTree = "<group>";
@@ -52,6 +64,15 @@
 				0556E1CA1A1F812400F3421E /* Info.plist */,
 			);
 			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		0556E1D21A1F820B00F3421E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				0556E1D01A1F820100F3421E /* Security.framework */,
+			);
+			name = Frameworks;
+			path = LoginScriptPlugin;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -120,6 +141,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0556E1D51A1F824900F3421E /* LoginScriptPlugin.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -159,7 +181,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.10;
+				MACOSX_DEPLOYMENT_TARGET = 10.7;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
@@ -194,7 +216,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.10;
+				MACOSX_DEPLOYMENT_TARGET = 10.7;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
 			};
