@@ -1,7 +1,7 @@
 LoginScriptPlugin
 =================
 
-This is an implementation based on [TN2228, Running At Login](https://developer.apple.com/library/mac/technotes/tn2228) that allows you to execute scripts when a user logs in. It provides a replacement for LoginHooks (which have been removed in 10.10) and have the advantage over LaunchAgents that it executes before any user processes are loaded, avoiding potential race conditions.
+This is an implementation based on [TN2228, Running At Login](https://developer.apple.com/library/mac/technotes/tn2228) that allows you to execute scripts when a user logs in. It provides a replacement for LoginHooks (which have been deprecated) and have the advantage over LaunchAgents that it executes before any user processes are loaded, avoiding potential race conditions.
 
 
 WARNING
