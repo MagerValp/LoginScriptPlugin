@@ -1,11 +1,10 @@
 #!/bin/bash
 
 
-#warning REVIEW: Might be nice to do the chmodding and chowning automatically in configureplugin.sh, since things won’t work otherwise.
-
 declare -r RIGHT="system.login.console"
 declare -r PLUGIN="LoginScriptPlugin"
 declare -r PLUGIN_PATH="/Library/Security/SecurityAgentPlugins/$PLUGIN.bundle"
+declare -r SCRIPT_DIR="/Library/Application Support/$PLUGIN"
 
 
 declare -ri EX_OK=0
@@ -25,6 +24,89 @@ declare -ri EX_PROTOCOL=76      # Remote protocol failure.
 declare -ri EX_NOPERM=77        # Required permission missing.
 declare -ri EX_CONFIG=78        # Something was unconfigured or misconfigured.
 
+
+# Ensure that permissions are valid.
+function check_script_perms() {
+    local path="$1"
+    local result=0
+    
+    # Reject if path isn't on boot volume.
+    if [[ $(stat -f "%d" "$path") != $(stat -f "%d" "/") ]]; then
+        echo "Warning: $path is not on boot volume"
+        result=1
+    fi
+    
+    # Reject symbolic links.
+    if [[ -h "$path" ]]; then
+        echo "Warning: $path is a symbolic link"
+        result=1
+    fi
+    
+    # Ensure that it's owned by root.
+    if [[ $(stat -f "%u" "$path") -ne 0 ]]; then
+        echo "Warning: $path isn't owned by root"
+        result=1
+    fi
+    
+    # Reject world writable paths.
+    if [[ $(ls -ld "$path" | cut -c 9) == "w" ]]; then
+        echo "Warning: $path is world writable"
+        result=1
+    fi
+    
+    # Reject group writable paths unless the gid is wheel.
+    if [[ $(ls -ld "$path" | cut -c 6) == "w" ]]; then
+        if [[ $(stat -f "%g" "$path") -ne 0 ]]; then
+            echo "Warning: $path is group writable"
+            result=1
+        fi
+    fi
+    
+    # Path must be executable.
+    if [[ ! -x "$path" ]]; then
+        echo "Warning: $path isn't executable"
+        result=1
+    fi
+    
+    return $result
+}
+
+# Check permissions on the plugin's support directory.
+function check_script_dir() {
+    local script_names=( \
+        "premount-root"  \
+        "premount-user"  \
+        "postmount-root" \
+        "postmount-user" \
+    )
+    local path
+    local script
+    
+    if [[ ! -d "$SCRIPT_DIR" ]]; then
+        echo "Warning: $SCRIPT_DIR does not exist"
+    fi
+    
+    path="$SCRIPT_DIR"
+    while true; do
+        if [[ -d "$path" ]]; then
+            if ! check_script_perms "$path"; then
+                echo "Warning: wrong permissions on $path"
+            fi
+        fi
+        if [[ "$path" == "/" ]]; then
+            break
+        fi
+        path="$(dirname "$path")"
+    done
+    
+    for path in "${paths_to_check[@]}"; do
+        if [[ -e "$path" ]]; then
+            if ! check_path "$path"; then
+                echo "Warning: wrong permissions on $path"
+            fi
+        fi
+    done
+}
 
 # Execute security authorizationdb command.
 function authdb() {
@@ -119,7 +201,7 @@ function main() {
 		return $EX_UNAVAILABLE
 	fi
 	
-	echo "Adding $PLUGIN to $RIGHT"
+	echo "* Adding $PLUGIN to $RIGHT"
 	
 	if authdb read "$RIGHT" > "$plist" 2>/dev/null; then
 	    echo "Read $RIGHT from authorization db"
@@ -161,6 +243,10 @@ function main() {
     fi
 	
     rm -f "$plist" "$org_plist"
+    
+    echo "* Checking script permissions"
+    check_script_dir
+    
     return 0
 }
 
