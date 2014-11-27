@@ -215,6 +215,7 @@ static OSStatus MechanismCreate(AuthorizationPluginRef inPlugin,
 bool VerifyScript(const char *path, aslclient logClient)
 {
     struct stat info;
+#warning REVIEW: VerifyScript(…) should verify that all components reside on the same (boot) volume (st_dev).
     
     // Reject if we can't stat the path.
     if (lstat(path, &info)) {
@@ -259,6 +260,7 @@ bool VerifyScript(const char *path, aslclient logClient)
         // BSD's dirname() doesn't modify the string passed.
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
+#warning REVIEW: dirname() is not thread safe, yet mechanisms need to be thread safe.
         return VerifyScript(dirname(path), logClient);
         #pragma clang diagnostic pop
     }
@@ -292,15 +294,19 @@ AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslcli
                 "Fork failed with errno %d", errno);
     } else if (childPid == 0) {
         // Child.
+#warning REVIEW: User commands still run in root's session.
         if (uid != 0 || gid != 0) {
             setgid(gid);
             setuid(uid);
+#warning REVIEW: Need to check the return value of setuid & setgid and exit if either fails.
         }
         snprintf(uidStr, sizeof(uidStr), "%d", uid);
+#warning REVIEW: To be safe, close open file descriptors prior to execl in child process.
         execl(path, path, uidStr, (char *)NULL);
         // The following only executes if execl() fails.
         asl_log(logClient, NULL, ASL_LEVEL_ERR,
                 "Executing %s failed with errno %d", path, errno);
+#warning REVIEW: If script fails to execute, e.g. due to user's resource limit, authorization is given (EX_OSERR != EX_NOPERM)
         exit(EX_OSERR);
     } else {
         // Parent.
@@ -359,6 +365,7 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
         gid = 0;
     } else {
         // Retrieve the uid and gid from the authorization context.
+#warning REVIEW: Sample code in TN2228 suggests checking value->length of the return of GetContextValue(…) before casting.
         if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "uid", &authContextFlags, &value) != errAuthorizationSuccess) {
             uid = NOBODY;
         } else {
@@ -371,6 +378,7 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
         }
     }
     if (uid == NOBODY || gid == NOBODY) {
+#warning REVIEW: Line 374 may output uninitialized scriptPath. Initialize or remove from log format string.
         asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_WARNING,
                 "Can't execute %s as user, uid lookup failed", scriptPath);
     } else {

@@ -1,6 +1,8 @@
 #!/bin/bash
 
 
+#warning REVIEW: Might be nice to do the chmodding and chowning automatically in configureplugin.sh, since things won’t work otherwise.
+
 declare -r RIGHT="system.login.console"
 declare -r PLUGIN="LoginScriptPlugin"
 declare -r PLUGIN_PATH="/Library/Security/SecurityAgentPlugins/$PLUGIN.bundle"
