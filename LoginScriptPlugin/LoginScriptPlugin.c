@@ -410,9 +410,9 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
         }
     }
     if (uid == NOBODY || gid == NOBODY) {
-#warning REVIEW: Line 374 may output uninitialized scriptPath. Initialize or remove from log format string.
         asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_WARNING,
-                "Can't execute %s as user, uid lookup failed", scriptPath);
+                "Can't execute %s script as user, uid lookup failed",
+                mechanism->fPhase == kRunBeforeHomedirMount ? "premount" : "postmount");
     } else {
         snprintf(scriptPath, sizeof(scriptPath), "%s/%s-%s",
                  kLoginScriptDir,
