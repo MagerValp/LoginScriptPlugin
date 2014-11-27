@@ -329,14 +329,21 @@ bool VerifyScript(const char *path, aslclient logClient)
 /// Execute the script at path as uid/gid.
 ///
 /// Fail authorization if the script exits with EX_NOPERM, otherwise proceed.
-AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslclient logClient)
+AuthorizationResult ExecuteScript(const char *path,
+                                  uid_t uid,
+                                  gid_t gid,
+                                  const char *home,
+                                  userContext context,
+                                  aslclient logClient)
 {
     AuthorizationResult result;
-    char uidStr[21];
     pid_t childPid;
     int childStatus;
     long maxfd;
     long fd;
+    char uidStr[3 * sizeof(uid_t) + 1];
+    char gidStr[3 * sizeof(gid_t) + 1];
+    char cfUserTextEncoding[2 * sizeof(uid_t) + 7];
     
     result = kAuthorizationResultAllow;
     
@@ -357,7 +364,7 @@ AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslcli
     } else if (childPid == 0) {
         // Child.
 #warning REVIEW: User commands still run in root's session.
-        if (uid != 0 || gid != 0) {
+        if (context == kRunAsUser) {
             if (setgid(gid) || setuid(uid)) {
                 asl_log(logClient, NULL, ASL_LEVEL_ERR,
                         "setgid/setuid failed, aborting execution of %s", path);
@@ -381,8 +388,16 @@ AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslcli
             }
         }
         
+        // Set default text encoding for Core Foundation.
+        snprintf(cfUserTextEncoding, sizeof(cfUserTextEncoding), "0x%X:0:0", getuid());
+        if (setenv("__CF_USER_TEXT_ENCODING", cfUserTextEncoding, 1) != 0) {
+            asl_log(logClient, NULL, ASL_LEVEL_WARNING,
+                    "Couldn't set __CF_USER_TEXT_ENCODING");
+        }
+        
         snprintf(uidStr, sizeof(uidStr), "%d", uid);
-        execl(path, path, uidStr, (char *)NULL);
+        snprintf(gidStr, sizeof(gidStr), "%d", gid);
+        execl(path, path, uidStr, gidStr, home, (char *)NULL);
         // The following only executes if execl() fails.
         asl_log(logClient, NULL, ASL_LEVEL_ERR,
                 "Executing %s failed with errno %d", path, errno);
@@ -428,6 +443,7 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
     
     uid_t uid;
     gid_t gid;
+    char *home;
     AuthorizationContextFlags authContextFlags;
     const AuthorizationValue *value;
     
@@ -439,32 +455,38 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
     
     result = kAuthorizationResultAllow;
     
-    // Execute script.
-    if (mechanism->fContext == kRunAsRoot) {
-        uid = 0;
-        gid = 0;
-    } else {
-        // Retrieve the uid and gid from the authorization context.
-        uid = NOBODY;
-        gid = NOBODY;
-        if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "uid", &authContextFlags, &value) == errAuthorizationSuccess && value->length == sizeof(uid_t)) {
-            uid = *(const uid_t *)value->data;
-        }
-        if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "gid", &authContextFlags, &value) == errAuthorizationSuccess && value->length == sizeof(gid_t)) {
-            gid = *(const gid_t *)value->data;
+    // Retrieve values from the authorization context.
+    uid = NOBODY;
+    gid = NOBODY;
+    home = NULL;
+    if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "uid", &authContextFlags, &value) == errAuthorizationSuccess && value->length == sizeof(uid_t)) {
+        uid = *(const uid_t *)value->data;
+    }
+    if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "gid", &authContextFlags, &value) == errAuthorizationSuccess && value->length == sizeof(gid_t)) {
+        gid = *(const gid_t *)value->data;
+    }
+    if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "home", &authContextFlags, &value) == errAuthorizationSuccess) {
+        if ((value->length > 0) && (((const char *) value->data)[value->length - 1] == 0)) {
+            home = value->data;
+        } else {
+            asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_WARNING,
+                    "GetContextValue didn't return a zero terminated string for home");
         }
     }
+    
     if (uid == NOBODY || gid == NOBODY) {
         asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_WARNING,
-                "Can't execute %s script as user, uid lookup failed",
-                mechanism->fPhase == kRunBeforeHomedirMount ? "premount" : "postmount");
+                "Can't execute script, uid lookup failed");
+    } else if (home == NULL) {
+        asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_WARNING,
+                "Can't execute script, homedir lookup failed");
     } else {
         snprintf(scriptPath, sizeof(scriptPath), "%s/%s-%s",
                  kLoginScriptDir,
                  mechanism->fPhase == kRunBeforeHomedirMount ? "premount" : "postmount",
                  mechanism->fContext == kRunAsRoot ? "root" : "user");
         
-        result = ExecuteScript(scriptPath, uid, gid, mechanism->fPlugin->fLogClient);
+        result = ExecuteScript(scriptPath, uid, gid, home, mechanism->fContext, mechanism->fPlugin->fLogClient);
     }
     
     if ((err = mechanism->fPlugin->fCallbacks->SetResult(mechanism->fEngine, result)) != errAuthorizationSuccess) {

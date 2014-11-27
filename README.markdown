@@ -27,14 +27,22 @@ Configuration
 
 *Warning: this is likely to change in a later release.*
 
-Create the folder `/Library/Application Support/LoginScriptPlugin` and place scripts there. The plugin looks for the following four scripts:
+Create the folder `/Library/Application Support/LoginScriptPlugin` and place scripts there. Make sure the folder and all the scripts are owned by `root:wheel` and not writable by anyone else. The plugin looks for the following four scripts:
 
 * `premount-root`
 * `premount-user`
 * `postmount-root`
 * `postmount-user`
 
-They will execute in that order, either before or after the user's home directory has been mounted, and either as root or the user that's logging in. Make sure the folder and all the scripts are owned by `root:wheel` and not writable by anyone else.
+They will execute in that order, either before or after the user's home directory has been mounted, and either as root or the user that's logging in. The scripts will receive the following arguments:
+
+Variable | Value | Example
+-------- | ----- | -------
+`$1`     | UID   | 501
+`$2`     | GID   | 20
+`$3`     | Home  | /Users/ladmin
+
+Please note that since the scripts are executing before the session has been fully initialized you can't count on regular shell variables being set to expected values. Notably `$HOME`, `$USER` **are not set** and `$PATH` is **very rudimentary**.
 
 
 License
