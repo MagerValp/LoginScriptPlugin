@@ -312,9 +312,11 @@ AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslcli
         // Child.
 #warning REVIEW: User commands still run in root's session.
         if (uid != 0 || gid != 0) {
-            setgid(gid);
-            setuid(uid);
-#warning REVIEW: Need to check the return value of setuid & setgid and exit if either fails.
+            if (setgid(gid) || setuid(uid)) {
+                asl_log(logClient, NULL, ASL_LEVEL_ERR,
+                        "setgid/setuid failed, aborting execution of %s", path);
+                exit(EX_NOPERM);
+            }
         }
         
         // Mark any stray file descriptors for closing.
