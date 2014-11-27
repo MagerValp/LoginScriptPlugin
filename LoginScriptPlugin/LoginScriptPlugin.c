@@ -211,15 +211,28 @@ static OSStatus MechanismCreate(AuthorizationPluginRef inPlugin,
 ///
 /// The script itself and its containing directories should all be owned
 /// by root, and not writable by anyone other than root:wheel. The path
-/// should be absolute and must not contain any symbolic links.
+/// should be absolute, on the boot volume, and must not contain any
+/// symbolic links.
 bool VerifyScript(const char *path, aslclient logClient)
 {
     struct stat info;
-#warning REVIEW: VerifyScript(…) should verify that all components reside on the same (boot) volume (st_dev).
+    struct stat rootInfo;
+
+    // Reject if we can't stat the root.
+    if (lstat("/", &rootInfo)) {
+        asl_log(logClient, NULL, ASL_LEVEL_WARNING, "Can't stat /");
+        return false;
+    }
     
     // Reject if we can't stat the path.
     if (lstat(path, &info)) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "Can't stat %s", path);
+        return false;
+    }
+    
+    // Reject if path isn't on boot volume.
+    if (info.st_dev != rootInfo.st_dev) {
+        asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is not on boot volume", path);
         return false;
     }
     
