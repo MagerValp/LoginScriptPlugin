@@ -397,16 +397,13 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
         gid = 0;
     } else {
         // Retrieve the uid and gid from the authorization context.
-#warning REVIEW: Sample code in TN2228 suggests checking value->length of the return of GetContextValue(…) before casting.
-        if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "uid", &authContextFlags, &value) != errAuthorizationSuccess) {
-            uid = NOBODY;
-        } else {
+        uid = NOBODY;
+        gid = NOBODY;
+        if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "uid", &authContextFlags, &value) == errAuthorizationSuccess && value->length == sizeof(uid_t)) {
             uid = *(const uid_t *)value->data;
         }
-        if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "gid", &authContextFlags, &value) != errAuthorizationSuccess) {
-            gid = NOBODY;
-        } else {
-            gid = *(const uid_t *)value->data;
+        if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "gid", &authContextFlags, &value) == errAuthorizationSuccess && value->length == sizeof(gid_t)) {
+            gid = *(const gid_t *)value->data;
         }
     }
     if (uid == NOBODY || gid == NOBODY) {
