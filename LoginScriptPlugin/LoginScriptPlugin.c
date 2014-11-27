@@ -14,6 +14,7 @@
 #include <asl.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <string.h>
 #include <assert.h>
 #include <sys/wait.h>
@@ -288,6 +289,8 @@ AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslcli
     char uidStr[21];
     pid_t childPid;
     int childStatus;
+    long maxfd;
+    long fd;
     
     result = kAuthorizationResultAllow;
     
@@ -313,8 +316,24 @@ AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslcli
             setuid(uid);
 #warning REVIEW: Need to check the return value of setuid & setgid and exit if either fails.
         }
+        
+        // Mark any stray file descriptors for closing.
+        maxfd = sysconf(_SC_OPEN_MAX);
+        if (maxfd < 0) {
+            maxfd = OPEN_MAX;
+        }
+        for (fd = STDERR_FILENO + 1; fd < maxfd; fd++) {
+            // Use FD_CLOEXEC instead of close to avoid libdispatch crash.
+            if (fcntl((int)fd, F_SETFD, FD_CLOEXEC) == -1) {
+                if (errno != EBADF) {
+                    asl_log(logClient, NULL, ASL_LEVEL_ERR,
+                            "Marking file descriptor %ld for closing failed with errno %d", fd, errno);
+                    exit(EX_NOPERM);
+                }
+            }
+        }
+        
         snprintf(uidStr, sizeof(uidStr), "%d", uid);
-#warning REVIEW: To be safe, close open file descriptors prior to execl in child process.
         execl(path, path, uidStr, (char *)NULL);
         // The following only executes if execl() fails.
         asl_log(logClient, NULL, ASL_LEVEL_ERR,
