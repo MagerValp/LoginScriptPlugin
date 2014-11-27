@@ -23,6 +23,8 @@
 #include <sys/param.h>
 #include <libgen.h>
 #include <sysexits.h>
+#include <pthread.h>
+
 
 #include "LoginScriptPlugin.h"
 
@@ -208,6 +210,35 @@ static OSStatus MechanismCreate(AuthorizationPluginRef inPlugin,
     return errAuthorizationSuccess;
 }
 
+/// Get the parent directory of path in a threadsafe manner.
+///
+/// @param path     A string with a path.
+/// @param parent   Pointer to a buffer large enough to hold
+///                 the parent directory string.
+/// @return true for success.
+bool GetParentDir(const char *path, char **parent) {
+    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    char *dirnameResult;
+    
+    pthread_mutex_lock(&lock);
+    
+    // BSD's dirname() doesn't modify the string passed so we can safely ignore
+    // the const warning
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
+    dirnameResult = dirname(path);
+    #pragma clang diagnostic pop
+    if (dirnameResult == NULL) {
+        pthread_mutex_unlock(&lock);
+        return false;
+    }
+    strcpy(*parent, dirnameResult);
+    
+    pthread_mutex_unlock(&lock);
+
+    return true;
+}
+
 /// Verify that a script is suitable for launching as root.
 ///
 /// The script itself and its containing directories should all be owned
@@ -218,65 +249,80 @@ bool VerifyScript(const char *path, aslclient logClient)
 {
     struct stat info;
     struct stat rootInfo;
-
+    bool pathOK;
+    char *parent;
+    
+    pathOK = true;
+    
     // Reject if we can't stat the root.
     if (lstat("/", &rootInfo)) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "Can't stat /");
-        return false;
+        pathOK = false;
     }
     
     // Reject if we can't stat the path.
     if (lstat(path, &info)) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "Can't stat %s", path);
-        return false;
+        pathOK = false;
     }
     
     // Reject if path isn't on boot volume.
     if (info.st_dev != rootInfo.st_dev) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is not on boot volume", path);
-        return false;
+        pathOK = false;
     }
     
     // Reject symbolic links.
     if (S_ISLNK(info.st_mode)) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is a symbolic link", path);
-        return false;
+        pathOK = false;
     }
     
     // Ensure that it's owned by root.
     if (info.st_uid != 0) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s isn't owned by root", path);
-        return false;
+        pathOK = false;
     }
     
     // Reject world writable paths.
     if (info.st_mode & S_IWOTH) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is world writable", path);
-        return false;
+        pathOK = false;
     }
     
     // Reject group writable paths unless the gid is wheel.
     if (info.st_mode & S_IWGRP && info.st_gid != 0) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is group writable", path);
-        return false;
+        pathOK = false;
     }
     
     // Path must be executable.
     if (! (info.st_mode & S_IXUSR)) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s isn't executable", path);
-        return false;
+        pathOK = false;
     }
     
     // Unless we're at the root, recursively check the parent directory.
     if (strcmp(path, "/") == 0) {
-        return true;
+        return pathOK;
+    
     } else {
-        // BSD's dirname() doesn't modify the string passed.
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
-#warning REVIEW: dirname() is not thread safe, yet mechanisms need to be thread safe.
-        return VerifyScript(dirname(path), logClient);
-        #pragma clang diagnostic pop
+        
+        parent = malloc(strlen(path) + 1);
+        if (parent == NULL) {
+            asl_log(logClient, NULL, ASL_LEVEL_WARNING, "memory allocation failed");
+            return false;
+        }
+        
+        if (! GetParentDir(path, &parent)) {
+            asl_log(logClient, NULL, ASL_LEVEL_WARNING, "failed to determine parent directory");
+            free(parent);
+            return false;
+        }
+        
+        pathOK = VerifyScript(parent, logClient) && pathOK;
+        free(parent);
+        return pathOK;
     }
 }
 
