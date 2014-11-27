@@ -338,8 +338,8 @@ AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslcli
         // The following only executes if execl() fails.
         asl_log(logClient, NULL, ASL_LEVEL_ERR,
                 "Executing %s failed with errno %d", path, errno);
-#warning REVIEW: If script fails to execute, e.g. due to user's resource limit, authorization is given (EX_OSERR != EX_NOPERM)
-        exit(EX_OSERR);
+        exit(EX_NOPERM);
+        
     } else {
         // Parent.
         asl_log(logClient, NULL, ASL_LEVEL_DEBUG,
