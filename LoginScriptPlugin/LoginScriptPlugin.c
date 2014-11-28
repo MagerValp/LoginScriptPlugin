@@ -14,6 +14,7 @@
 #include <asl.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <string.h>
 #include <assert.h>
 #include <sys/wait.h>
@@ -22,6 +23,8 @@
 #include <sys/param.h>
 #include <libgen.h>
 #include <sysexits.h>
+#include <pthread.h>
+
 
 #include "LoginScriptPlugin.h"
 
@@ -207,72 +210,140 @@ static OSStatus MechanismCreate(AuthorizationPluginRef inPlugin,
     return errAuthorizationSuccess;
 }
 
+/// Get the parent directory of path in a threadsafe manner.
+///
+/// @param path     A string with a path.
+/// @param parent   Pointer to a buffer large enough to hold
+///                 the parent directory string.
+/// @return true for success.
+bool GetParentDir(const char *path, char **parent) {
+    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    char *dirnameResult;
+    
+    pthread_mutex_lock(&lock);
+    
+    // BSD's dirname() doesn't modify the string passed so we can safely ignore
+    // the const warning
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
+    dirnameResult = dirname(path);
+    #pragma clang diagnostic pop
+    if (dirnameResult == NULL) {
+        pthread_mutex_unlock(&lock);
+        return false;
+    }
+    strcpy(*parent, dirnameResult);
+    
+    pthread_mutex_unlock(&lock);
+
+    return true;
+}
+
 /// Verify that a script is suitable for launching as root.
 ///
 /// The script itself and its containing directories should all be owned
 /// by root, and not writable by anyone other than root:wheel. The path
-/// should be absolute and must not contain any symbolic links.
+/// should be absolute, on the boot volume, and must not contain any
+/// symbolic links.
 bool VerifyScript(const char *path, aslclient logClient)
 {
     struct stat info;
+    struct stat rootInfo;
+    bool pathOK;
+    char *parent;
+    
+    pathOK = true;
+    
+    // Reject if we can't stat the root.
+    if (lstat("/", &rootInfo)) {
+        asl_log(logClient, NULL, ASL_LEVEL_WARNING, "Can't stat /");
+        pathOK = false;
+    }
     
     // Reject if we can't stat the path.
     if (lstat(path, &info)) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "Can't stat %s", path);
-        return false;
+        pathOK = false;
+    }
+    
+    // Reject if path isn't on boot volume.
+    if (info.st_dev != rootInfo.st_dev) {
+        asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is not on boot volume", path);
+        pathOK = false;
     }
     
     // Reject symbolic links.
     if (S_ISLNK(info.st_mode)) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is a symbolic link", path);
-        return false;
+        pathOK = false;
     }
     
     // Ensure that it's owned by root.
     if (info.st_uid != 0) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s isn't owned by root", path);
-        return false;
+        pathOK = false;
     }
     
     // Reject world writable paths.
     if (info.st_mode & S_IWOTH) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is world writable", path);
-        return false;
+        pathOK = false;
     }
     
     // Reject group writable paths unless the gid is wheel.
     if (info.st_mode & S_IWGRP && info.st_gid != 0) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is group writable", path);
-        return false;
+        pathOK = false;
     }
     
     // Path must be executable.
     if (! (info.st_mode & S_IXUSR)) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s isn't executable", path);
-        return false;
+        pathOK = false;
     }
     
     // Unless we're at the root, recursively check the parent directory.
     if (strcmp(path, "/") == 0) {
-        return true;
+        return pathOK;
+    
     } else {
-        // BSD's dirname() doesn't modify the string passed.
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
-        return VerifyScript(dirname(path), logClient);
-        #pragma clang diagnostic pop
+        
+        parent = malloc(strlen(path) + 1);
+        if (parent == NULL) {
+            asl_log(logClient, NULL, ASL_LEVEL_WARNING, "memory allocation failed");
+            return false;
+        }
+        
+        if (! GetParentDir(path, &parent)) {
+            asl_log(logClient, NULL, ASL_LEVEL_WARNING, "failed to determine parent directory");
+            free(parent);
+            return false;
+        }
+        
+        pathOK = VerifyScript(parent, logClient) && pathOK;
+        free(parent);
+        return pathOK;
     }
 }
 
 /// Execute the script at path as uid/gid.
 ///
 /// Fail authorization if the script exits with EX_NOPERM, otherwise proceed.
-AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslclient logClient)
+AuthorizationResult ExecuteScript(const char *path,
+                                  uid_t uid,
+                                  gid_t gid,
+                                  const char *home,
+                                  userContext context,
+                                  aslclient logClient)
 {
     AuthorizationResult result;
-    char uidStr[21];
     pid_t childPid;
     int childStatus;
+    long maxfd;
+    long fd;
+    char uidStr[3 * sizeof(uid_t) + 1];
+    char gidStr[3 * sizeof(gid_t) + 1];
+    char cfUserTextEncoding[2 * sizeof(uid_t) + 7];
     
     result = kAuthorizationResultAllow;
     
@@ -292,16 +363,46 @@ AuthorizationResult ExecuteScript(const char *path, uid_t uid, gid_t gid, aslcli
                 "Fork failed with errno %d", errno);
     } else if (childPid == 0) {
         // Child.
-        if (uid != 0 || gid != 0) {
-            setgid(gid);
-            setuid(uid);
+#warning REVIEW: User commands still run in root's session.
+        if (context == kRunAsUser) {
+            if (setgid(gid) || setuid(uid)) {
+                asl_log(logClient, NULL, ASL_LEVEL_ERR,
+                        "setgid/setuid failed, aborting execution of %s", path);
+                exit(EX_NOPERM);
+            }
         }
+        
+        // Mark any stray file descriptors for closing.
+        maxfd = sysconf(_SC_OPEN_MAX);
+        if (maxfd < 0) {
+            maxfd = OPEN_MAX;
+        }
+        for (fd = STDERR_FILENO + 1; fd < maxfd; fd++) {
+            // Use FD_CLOEXEC instead of close to avoid libdispatch crash.
+            if (fcntl((int)fd, F_SETFD, FD_CLOEXEC) == -1) {
+                if (errno != EBADF) {
+                    asl_log(logClient, NULL, ASL_LEVEL_ERR,
+                            "Marking file descriptor %ld for closing failed with errno %d", fd, errno);
+                    exit(EX_NOPERM);
+                }
+            }
+        }
+        
+        // Set default text encoding for Core Foundation.
+        snprintf(cfUserTextEncoding, sizeof(cfUserTextEncoding), "0x%X:0:0", getuid());
+        if (setenv("__CF_USER_TEXT_ENCODING", cfUserTextEncoding, 1) != 0) {
+            asl_log(logClient, NULL, ASL_LEVEL_WARNING,
+                    "Couldn't set __CF_USER_TEXT_ENCODING");
+        }
+        
         snprintf(uidStr, sizeof(uidStr), "%d", uid);
-        execl(path, path, uidStr, (char *)NULL);
+        snprintf(gidStr, sizeof(gidStr), "%d", gid);
+        execl(path, path, uidStr, gidStr, home, (char *)NULL);
         // The following only executes if execl() fails.
         asl_log(logClient, NULL, ASL_LEVEL_ERR,
                 "Executing %s failed with errno %d", path, errno);
-        exit(EX_OSERR);
+        exit(EX_NOPERM);
+        
     } else {
         // Parent.
         asl_log(logClient, NULL, ASL_LEVEL_DEBUG,
@@ -342,6 +443,7 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
     
     uid_t uid;
     gid_t gid;
+    char *home;
     AuthorizationContextFlags authContextFlags;
     const AuthorizationValue *value;
     
@@ -353,33 +455,38 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
     
     result = kAuthorizationResultAllow;
     
-    // Execute script.
-    if (mechanism->fContext == kRunAsRoot) {
-        uid = 0;
-        gid = 0;
-    } else {
-        // Retrieve the uid and gid from the authorization context.
-        if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "uid", &authContextFlags, &value) != errAuthorizationSuccess) {
-            uid = NOBODY;
+    // Retrieve values from the authorization context.
+    uid = NOBODY;
+    gid = NOBODY;
+    home = NULL;
+    if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "uid", &authContextFlags, &value) == errAuthorizationSuccess && value->length == sizeof(uid_t)) {
+        uid = *(const uid_t *)value->data;
+    }
+    if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "gid", &authContextFlags, &value) == errAuthorizationSuccess && value->length == sizeof(gid_t)) {
+        gid = *(const gid_t *)value->data;
+    }
+    if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "home", &authContextFlags, &value) == errAuthorizationSuccess) {
+        if ((value->length > 0) && (((const char *) value->data)[value->length - 1] == 0)) {
+            home = value->data;
         } else {
-            uid = *(const uid_t *)value->data;
-        }
-        if (mechanism->fPlugin->fCallbacks->GetContextValue(mechanism->fEngine, "gid", &authContextFlags, &value) != errAuthorizationSuccess) {
-            gid = NOBODY;
-        } else {
-            gid = *(const uid_t *)value->data;
+            asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_WARNING,
+                    "GetContextValue didn't return a zero terminated string for home");
         }
     }
+    
     if (uid == NOBODY || gid == NOBODY) {
         asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_WARNING,
-                "Can't execute %s as user, uid lookup failed", scriptPath);
+                "Can't execute script, uid lookup failed");
+    } else if (home == NULL) {
+        asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_WARNING,
+                "Can't execute script, homedir lookup failed");
     } else {
         snprintf(scriptPath, sizeof(scriptPath), "%s/%s-%s",
                  kLoginScriptDir,
                  mechanism->fPhase == kRunBeforeHomedirMount ? "premount" : "postmount",
                  mechanism->fContext == kRunAsRoot ? "root" : "user");
         
-        result = ExecuteScript(scriptPath, uid, gid, mechanism->fPlugin->fLogClient);
+        result = ExecuteScript(scriptPath, uid, gid, home, mechanism->fContext, mechanism->fPlugin->fLogClient);
     }
     
     if ((err = mechanism->fPlugin->fCallbacks->SetResult(mechanism->fEngine, result)) != errAuthorizationSuccess) {
