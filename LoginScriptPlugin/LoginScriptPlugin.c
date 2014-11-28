@@ -216,7 +216,7 @@ static OSStatus MechanismCreate(AuthorizationPluginRef inPlugin,
 /// @param parent   Pointer to a buffer large enough to hold
 ///                 the parent directory string.
 /// @return true for success.
-bool GetParentDir(const char *path, char **parent) {
+static bool GetParentDir(const char *path, char **parent) {
     pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
     char *dirnameResult;
     
@@ -245,7 +245,7 @@ bool GetParentDir(const char *path, char **parent) {
 /// by root, and not writable by anyone other than root:wheel. The path
 /// should be absolute, on the boot volume, and must not contain any
 /// symbolic links.
-bool VerifyScript(const char *path, aslclient logClient)
+static bool VerifyScript(const char *path, aslclient logClient)
 {
     struct stat info;
     struct stat rootInfo;
@@ -329,7 +329,7 @@ bool VerifyScript(const char *path, aslclient logClient)
 /// Execute the script at path as uid/gid.
 ///
 /// Fail authorization if the script exits with EX_NOPERM, otherwise proceed.
-AuthorizationResult ExecuteScript(const char *path,
+static AuthorizationResult ExecuteScript(const char *path,
                                   uid_t uid,
                                   gid_t gid,
                                   const char *home,
