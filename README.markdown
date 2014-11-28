@@ -19,22 +19,27 @@ The plugin is currently tested on 10.9, but should work on 10.7 or newer.
 Installation
 ------------
 
-There is no installer package yet. Compile the plugin with Xcode 6.1, copy it to `/Library/Security/SecurityAgentPlugins`, and change the owner to `root:wheel`. Then run `configureplugin.sh enable` to activate the plugin.
+Download and install the [latest package](releases).
+
+
+Uninstallation
+--------------
+
+* Delete `/Library/Security/SecurityAgentPlugins/LoginScriptPlugin.bundle`
+* Run `configureplugin.sh disable`. The script can be found under [Installer Resources/Scripts](tree/master/Installer Resources/Scripts).
 
 
 Configuration
 -------------
 
-*Warning: this is likely to change in a later release.*
+Create the folder `/Library/Application Support/LoginScriptPlugin` and place your login scripts there. Make sure the folder and all the scripts are owned by `root:wheel` and not writable by anyone else. The plugin will execute scripts in this directory either before or after the user's home directory has been mounted, and either as root or the user that's logging in, determined by the script's name. The plugin looks for scripts that match the following patterns, in this order:
 
-Create the folder `/Library/Application Support/LoginScriptPlugin` and place scripts there. Make sure the folder and all the scripts are owned by `root:wheel` and not writable by anyone else. The plugin looks for the following four scripts:
+* `premount-root-*`
+* `premount-user-*`
+* `postmount-root-*`
+* `postmount-user-*`
 
-* `premount-root`
-* `premount-user`
-* `postmount-root`
-* `postmount-user`
-
-They will execute in that order, either before or after the user's home directory has been mounted, and either as root or the user that's logging in. The scripts will receive the following arguments:
+For example a script named `postmount-user-com.example.redirect_library.sh` will execute as the user logging in after the home directory has been mounted. The following arguments are passed to each script:
 
 Variable | Value | Example
 -------- | ----- | -------
