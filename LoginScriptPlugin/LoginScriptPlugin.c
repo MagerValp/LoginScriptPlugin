@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <assert.h>
+#include <glob.h>
 #include <sys/wait.h>
 #include <sys/errno.h>
 #include <sys/stat.h>
@@ -447,7 +448,9 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
     AuthorizationContextFlags authContextFlags;
     const AuthorizationValue *value;
     
-    char scriptPath[MAXPATHLEN];
+    glob_t g;
+    char scriptPattern[MAXPATHLEN];
+    int i;
     
     mechanism = (MechanismRecord *) inMechanism;
     asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_DEBUG, "LoginScriptPlugin:MechanismInvoke: inMechanism=%p", inMechanism);
@@ -481,12 +484,22 @@ static OSStatus MechanismInvoke(AuthorizationMechanismRef inMechanism)
         asl_log(mechanism->fPlugin->fLogClient, NULL, ASL_LEVEL_WARNING,
                 "Can't execute script, homedir lookup failed");
     } else {
-        snprintf(scriptPath, sizeof(scriptPath), "%s/%s-%s",
+        
+        // Find all scripts matching the current phase and context, aborting if
+        // execution doesn't return kAuthorizationResultAllow.
+        snprintf(scriptPattern, sizeof(scriptPattern), "%s/%s-%s*",
                  kLoginScriptDir,
                  mechanism->fPhase == kRunBeforeHomedirMount ? "premount" : "postmount",
                  mechanism->fContext == kRunAsRoot ? "root" : "user");
+        glob(scriptPattern, 0, NULL, &g);
+        for (i = 0; i < g.gl_pathc; i++) {
+            result = ExecuteScript(g.gl_pathv[i], uid, gid, home, mechanism->fContext, mechanism->fPlugin->fLogClient);
+            if (result != kAuthorizationResultAllow) {
+                break;
+            }
+        }
+        globfree(&g);
         
-        result = ExecuteScript(scriptPath, uid, gid, home, mechanism->fContext, mechanism->fPlugin->fLogClient);
     }
     
     if ((err = mechanism->fPlugin->fCallbacks->SetResult(mechanism->fEngine, result)) != errAuthorizationSuccess) {
