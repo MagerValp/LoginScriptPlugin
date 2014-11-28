@@ -19,14 +19,14 @@ The plugin is currently tested on 10.9, but should work on 10.7 or newer.
 Installation
 ------------
 
-Download and install the [latest package](releases).
+Download and install the [latest package](https://github.com/MagerValp/LoginScriptPlugin/releases).
 
 
 Uninstallation
 --------------
 
 * Delete `/Library/Security/SecurityAgentPlugins/LoginScriptPlugin.bundle`
-* Run `configureplugin.sh disable`. The script can be found under [Installer Resources/Scripts](tree/master/Installer Resources/Scripts).
+* Run `configureplugin.sh disable`. The script can be found under [Installer Resources/Scripts](https://github.com/MagerValp/LoginScriptPlugin/tree/master/Installer Resources/Scripts).
 
 
 Configuration
