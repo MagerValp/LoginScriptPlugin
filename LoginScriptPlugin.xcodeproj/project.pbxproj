@@ -85,6 +85,7 @@
 				0556E1C21A1F812400F3421E /* Sources */,
 				0556E1C31A1F812400F3421E /* Frameworks */,
 				0556E1C41A1F812400F3421E /* Resources */,
+				0520C7F81A287435009AC123 /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -135,6 +136,23 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		0520C7F81A287435009AC123 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "#!/bin/bash\n#\n# Sets the version string to a monotonically increased string, based on\n# the number of git commits.\n\nset -o errexit\nset -o nounset\n\nbuild_num=$(git --git-dir=\"$PROJECT_DIR/.git\" --work-tree=\"$PROJECT_DIR\" log | grep '^commit' | wc -l | tr -d '[:space:]')\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $build_num\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\n\nversion=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleShortVersionString\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\")\nif [[ \"$version\" == *b ]]; then\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString $version$build_num\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nfi\n\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		0556E1C21A1F812400F3421E /* Sources */ = {
@@ -227,9 +245,9 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = LoginScriptPlugin/Info.plist;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Security/SecurityAgentPlugins";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
+				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = bundle;
 			};
 			name = Debug;
@@ -239,9 +257,9 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = LoginScriptPlugin/Info.plist;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Security/SecurityAgentPlugins";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
+				SKIP_INSTALL = NO;
 				WRAPPER_EXTENSION = bundle;
 			};
 			name = Release;
@@ -265,6 +283,7 @@
 				0556E1CF1A1F812400F3421E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

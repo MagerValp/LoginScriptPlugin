@@ -1,0 +1,10 @@
+#!/bin/bash
+
+
+if [[ "$3" != "/" ]]; then
+    echo "$3 is not a valid installation target, must install to boot volume"
+    exit 73 # EX_CANTCREAT
+fi
+
+
+exit 0
