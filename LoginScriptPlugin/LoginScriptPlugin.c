@@ -331,11 +331,11 @@ static bool VerifyScript(const char *path, aslclient logClient)
 ///
 /// Fail authorization if the script exits with EX_NOPERM, otherwise proceed.
 static AuthorizationResult ExecuteScript(const char *path,
-                                  uid_t uid,
-                                  gid_t gid,
-                                  const char *home,
-                                  userContext context,
-                                  aslclient logClient)
+                                         uid_t uid,
+                                         gid_t gid,
+                                         const char *home,
+                                         userContext context,
+                                         aslclient logClient)
 {
     AuthorizationResult result;
     pid_t childPid;
@@ -355,7 +355,7 @@ static AuthorizationResult ExecuteScript(const char *path,
     }
     
     asl_log(logClient, NULL, ASL_LEVEL_NOTICE,
-            "Executing %s as uid %d", path, uid);
+            "Executing %s with uid=%d, gid=%d, home='%s'", path, uid, gid, home);
     
     childPid = fork();
     if (childPid == -1) {
