@@ -243,9 +243,9 @@ static bool GetParentDir(const char *path, char **parent) {
 /// Verify that a script is suitable for launching as root.
 ///
 /// The script itself and its containing directories should all be owned
-/// by root, and not writable by anyone other than root:wheel. The path
-/// should be absolute, on the boot volume, and must not contain any
-/// symbolic links.
+/// by root, and not writable by anyone other than root:wheel or root:admin.
+/// The path should be absolute, on the boot volume, and must not contain
+/// any symbolic links.
 static bool VerifyScript(const char *path, aslclient logClient)
 {
     struct stat info;
@@ -291,8 +291,8 @@ static bool VerifyScript(const char *path, aslclient logClient)
         pathOK = false;
     }
     
-    // Reject group writable paths unless the gid is wheel.
-    if (info.st_mode & S_IWGRP && info.st_gid != 0) {
+    // Reject group writable paths unless the gid is wheel or admin.
+    if (info.st_mode & S_IWGRP && !(info.st_gid == 0 || info.st_gid == 80)) {
         asl_log(logClient, NULL, ASL_LEVEL_WARNING, "%s is group writable", path);
         pathOK = false;
     }
