@@ -99,12 +99,14 @@ function check_script_dir() {
         path="$(dirname "$path")"
     done
     
-    for path in "${paths_to_check[@]}"; do
-        if [[ -e "$path" ]]; then
-            if ! check_path "$path"; then
-                echo "Warning: wrong permissions on $path"
+    for name in "${script_names[@]}"; do
+        for path in "$SCRIPT_DIR/$name"-*; do
+            if [[ -e "$path" ]]; then
+                if ! check_script_perms "$path"; then
+                    echo "Warning: wrong permissions on $path"
+                fi
             fi
-        fi
+        done
     done
 }
 
