@@ -19,7 +19,7 @@ The plugin is currently tested on 10.9, but should work on 10.7 or newer.
 Installation
 ------------
 
-Download and install the [latest package](releases).
+Download and install the [latest package](https://github.com/MagerValp/LoginScriptPlugin/releases).
 
 
 Uninstallation
