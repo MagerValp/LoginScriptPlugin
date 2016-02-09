@@ -176,6 +176,12 @@ function add_plugin_to_mechanisms() {
 }
 
 
+declare -a tempfiles
+cleanup_tempfiles() {
+    rm -f "${tempfiles[@]}"
+}
+trap cleanup_tempfiles EXIT
+
 function usage() {
     echo "Usage: $(basename "$0") [ enable | disable ]"
 }
@@ -183,69 +189,75 @@ function usage() {
 function main() {
     local cmd="$1"
 	local plist=$(mktemp -t "$RIGHT.plist")
+	tempfiles+=("$plist")
 	local org_plist=$(mktemp -t "$RIGHT.org.plist")
+	tempfiles+=("$org_plist")
 	
 	case "$cmd" in
-	    "enable") ;;
-	    "disable") ;;
+	    "enable")
+    	    echo "* Adding $PLUGIN to $RIGHT"
+    	    ;;
+	    "disable")
+    	    echo "* Removing $PLUGIN from $RIGHT"
+    	    ;;
 	    *)
 	        usage
-	        rm -f "$plist" "$org_plist"
 		    return $EX_USAGE
 		    ;;
 	esac
 	
-	if [[ ! -d "$PLUGIN_PATH" ]]; then
-	    echo "$PLUGIN_PATH is not installed"
-	    rm -f "$plist" "$org_plist"
-		return $EX_UNAVAILABLE
-	fi
-	
-	echo "* Adding $PLUGIN to $RIGHT"
-	
+	# Make sure the plugin is installed before trying to enable it.
+	if [[ "$cmd" == "enable" ]]; then
+    	if [[ ! -d "$PLUGIN_PATH" ]]; then
+    	    echo "$PLUGIN_PATH is not installed"
+    		return $EX_UNAVAILABLE
+    	fi
+    fi
+    
+	# Read the right from the authorization db.
 	if authdb read "$RIGHT" > "$plist" 2>/dev/null; then
 	    echo "Read $RIGHT from authorization db"
 	else
 		echo "Failed to read $RIGHT from authorization db"
-		rm -f "$plist" "$org_plist"
 		return $EX_OSERR
 	fi
+	# Save a copy of the unmodified right.
 	cat "$plist" > "$org_plist"
     
+    # Remove the plugin if it's enabled.
     if remove_plugin_from_mechanisms "$plist"; then
     	echo "Removed plugin from $RIGHT mechanisms"
     else
     	echo "Failed to remove plugin from $RIGHT mechanisms"
-    	rm -f "$plist" "$org_plist"
     	return $EX_DATAERR
     fi
     
+    # If we're enabling, add the plugin.
     if [[ "$cmd" == "enable" ]]; then
         if add_plugin_to_mechanisms "$plist"; then
         	echo "Added plugin to $RIGHT mechanisms"
         else
         	echo "Failed to add plugin to $RIGHT mechanisms"
-        	rm -f "$plist" "$org_plist"
         	return $EX_DATAERR
         fi
     fi
     
+    # If the right changed, write it back to the authorization db.
     if ! cmp -s "$plist" "$org_plist"; then
         if authdb write "$RIGHT" < "$plist" 2>/dev/null; then
     	    echo "Wrote $RIGHT to authorization db"
     	else
     	    echo "Failed to write $RIGHT to authorization db"
-    	    rm -f "$plist" "$org_plist"
     	    return $EX_NOPERM
     	fi
     else
         echo "No change, $PLUGIN was already ${cmd}d"
     fi
-	
-    rm -f "$plist" "$org_plist"
     
-    echo "* Checking script permissions"
-    check_script_dir
+	if [[ "$cmd" == "enable" ]]; then
+        echo "* Checking script permissions"
+        check_script_dir
+    fi
     
     return 0
 }
