@@ -147,6 +147,7 @@ function add_plugin_to_mechanisms() {
     local i
     local start_homedir=-1  # The array offset where HomeDirMechanism starts.
     local num_homedir=0     # The number of HomeDirMechanism entries.
+    local last_mech_offset
     local mech
     
     # Find the HomeDirMechanism entries in the mechanisms array.
@@ -163,14 +164,15 @@ function add_plugin_to_mechanisms() {
             fi
         fi
     done
+    last_mech_offset=$(( i - 1 ))
     if [[ $num_homedir -eq 0 ]]; then
         echo "HomeDirMechanism not found"
         return 1
     fi
     
     # Entries have to be inserted into the array in reverse order.
-    add_mech $((start_homedir + num_homedir)) "postmount-user" "$plist"
-    add_mech $((start_homedir + num_homedir)) "postmount-root" "$plist"
+    add_mech $((last_mech_offset)) "postmount-user" "$plist"
+    add_mech $((last_mech_offset)) "postmount-root" "$plist"
     add_mech $((start_homedir)) "premount-user" "$plist"
     add_mech $((start_homedir)) "premount-root" "$plist"
     
