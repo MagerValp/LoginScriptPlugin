@@ -110,69 +110,69 @@ function check_script_dir() {
 
 # Execute security authorizationdb command.
 function authdb() {
-	/usr/bin/security authorizationdb "$@"
+    /usr/bin/security authorizationdb "$@"
 }
 
 # Remove plugin from mechanisms.
 function remove_plugin_from_mechanisms() {
     local plist="$1"
-	local i=0
-	local mech
-	
-	while mech=$(/usr/libexec/PlistBuddy -c "print :mechanisms:$i" "$plist" 2>/dev/null); do
-		if [[ "${mech%%:*}" == "$PLUGIN" ]]; then
-		    /usr/libexec/PlistBuddy -c "delete :mechanisms:$i" "$plist"
-		else
-		    let i++
-		fi
-	done
-	
-	return 0
+    local i=0
+    local mech
+    
+    while mech=$(/usr/libexec/PlistBuddy -c "print :mechanisms:$i" "$plist" 2>/dev/null); do
+        if [[ "${mech%%:*}" == "$PLUGIN" ]]; then
+            /usr/libexec/PlistBuddy -c "delete :mechanisms:$i" "$plist"
+        else
+            let i++
+        fi
+    done
+    
+    return 0
 }
 
 # Insert a mechanism entry.
 function add_mech() {
-	local offset="$1"
-	local mech="$2"
-	local plist="$3"
-	
-	/usr/libexec/PlistBuddy -c "add :mechanisms:$((offset)) string ${PLUGIN}:$mech,privileged" "$plist"
+    local offset="$1"
+    local mech="$2"
+    local plist="$3"
+    
+    /usr/libexec/PlistBuddy -c "add :mechanisms:$((offset)) string ${PLUGIN}:$mech,privileged" "$plist"
 }
 
 # Insert entries before and after HomeDirMechanism in the rights plist.
 function add_plugin_to_mechanisms() {
-	local plist="$1"
-	local i
-	local start_homedir=-1	# The array offset where HomeDirMechanism starts.
-	local num_homedir=0		# The number of HomeDirMechanism entries.
-	local mech
-	
-	# Find the HomeDirMechanism entries in the mechanisms array.
-	for (( i = 0; ; i++ )); do
-		if ! mech=$(/usr/libexec/PlistBuddy -c "print :mechanisms:$i" "$plist" 2>/dev/null); then
-			break
-		fi
-		if [[ "${mech%%:*}" == "HomeDirMechanism" ]]; then
-			if [[ $num_homedir -eq 0 ]]; then
-				start_homedir=$i
-				num_homedir=1
-			else
-				let num_homedir++
-			fi
-		fi
-	done
-	if [[ $num_homedir -eq 0 ]]; then
-		echo "HomeDirMechanism not found"
-		return 1
-	fi
-	
-	# Entries have to be inserted into the array in reverse order.
-	add_mech $((start_homedir + num_homedir)) "postmount-user" "$plist"
-	add_mech $((start_homedir + num_homedir)) "postmount-root" "$plist"
-	add_mech $((start_homedir)) "premount-user" "$plist"
-	add_mech $((start_homedir)) "premount-root" "$plist"
-	
-	return 0
+    local plist="$1"
+    local i
+    local start_homedir=-1  # The array offset where HomeDirMechanism starts.
+    local num_homedir=0     # The number of HomeDirMechanism entries.
+    local mech
+    
+    # Find the HomeDirMechanism entries in the mechanisms array.
+    for (( i = 0; ; i++ )); do
+        if ! mech=$(/usr/libexec/PlistBuddy -c "print :mechanisms:$i" "$plist" 2>/dev/null); then
+            break
+        fi
+        if [[ "${mech%%:*}" == "HomeDirMechanism" ]]; then
+            if [[ $num_homedir -eq 0 ]]; then
+                start_homedir=$i
+                num_homedir=1
+            else
+                let num_homedir++
+            fi
+        fi
+    done
+    if [[ $num_homedir -eq 0 ]]; then
+        echo "HomeDirMechanism not found"
+        return 1
+    fi
+    
+    # Entries have to be inserted into the array in reverse order.
+    add_mech $((start_homedir + num_homedir)) "postmount-user" "$plist"
+    add_mech $((start_homedir + num_homedir)) "postmount-root" "$plist"
+    add_mech $((start_homedir)) "premount-user" "$plist"
+    add_mech $((start_homedir)) "premount-root" "$plist"
+    
+    return 0
 }
 
 
@@ -188,73 +188,73 @@ function usage() {
 
 function main() {
     local cmd="$1"
-	local plist=$(mktemp -t "$RIGHT.plist")
-	tempfiles+=("$plist")
-	local org_plist=$(mktemp -t "$RIGHT.org.plist")
-	tempfiles+=("$org_plist")
-	
-	case "$cmd" in
-	    "enable")
-    	    echo "* Adding $PLUGIN to $RIGHT"
-    	    ;;
-	    "disable")
-    	    echo "* Removing $PLUGIN from $RIGHT"
-    	    ;;
-	    *)
-	        usage
-		    return $EX_USAGE
-		    ;;
-	esac
-	
-	# Make sure the plugin is installed before trying to enable it.
-	if [[ "$cmd" == "enable" ]]; then
-    	if [[ ! -d "$PLUGIN_PATH" ]]; then
-    	    echo "$PLUGIN_PATH is not installed"
-    		return $EX_UNAVAILABLE
-    	fi
+    local plist=$(mktemp -t "$RIGHT.plist")
+    tempfiles+=("$plist")
+    local org_plist=$(mktemp -t "$RIGHT.org.plist")
+    tempfiles+=("$org_plist")
+    
+    case "$cmd" in
+        "enable")
+            echo "* Adding $PLUGIN to $RIGHT"
+            ;;
+        "disable")
+            echo "* Removing $PLUGIN from $RIGHT"
+            ;;
+        *)
+            usage
+            return $EX_USAGE
+            ;;
+    esac
+    
+    # Make sure the plugin is installed before trying to enable it.
+    if [[ "$cmd" == "enable" ]]; then
+        if [[ ! -d "$PLUGIN_PATH" ]]; then
+            echo "$PLUGIN_PATH is not installed"
+            return $EX_UNAVAILABLE
+        fi
     fi
     
-	# Read the right from the authorization db.
-	if authdb read "$RIGHT" > "$plist" 2>/dev/null; then
-	    echo "Read $RIGHT from authorization db"
-	else
-		echo "Failed to read $RIGHT from authorization db"
-		return $EX_OSERR
-	fi
-	# Save a copy of the unmodified right.
-	cat "$plist" > "$org_plist"
+    # Read the right from the authorization db.
+    if authdb read "$RIGHT" > "$plist" 2>/dev/null; then
+        echo "Read $RIGHT from authorization db"
+    else
+        echo "Failed to read $RIGHT from authorization db"
+        return $EX_OSERR
+    fi
+    # Save a copy of the unmodified right.
+    cat "$plist" > "$org_plist"
     
     # Remove the plugin if it's enabled.
     if remove_plugin_from_mechanisms "$plist"; then
-    	echo "Removed plugin from $RIGHT mechanisms"
+        echo "Removed plugin from $RIGHT mechanisms"
     else
-    	echo "Failed to remove plugin from $RIGHT mechanisms"
-    	return $EX_DATAERR
+        echo "Failed to remove plugin from $RIGHT mechanisms"
+        return $EX_DATAERR
     fi
     
     # If we're enabling, add the plugin.
     if [[ "$cmd" == "enable" ]]; then
         if add_plugin_to_mechanisms "$plist"; then
-        	echo "Added plugin to $RIGHT mechanisms"
+            echo "Added plugin to $RIGHT mechanisms"
         else
-        	echo "Failed to add plugin to $RIGHT mechanisms"
-        	return $EX_DATAERR
+            echo "Failed to add plugin to $RIGHT mechanisms"
+            return $EX_DATAERR
         fi
     fi
     
     # If the right changed, write it back to the authorization db.
     if ! cmp -s "$plist" "$org_plist"; then
         if authdb write "$RIGHT" < "$plist" 2>/dev/null; then
-    	    echo "Wrote $RIGHT to authorization db"
-    	else
-    	    echo "Failed to write $RIGHT to authorization db"
-    	    return $EX_NOPERM
-    	fi
+            echo "Wrote $RIGHT to authorization db"
+        else
+            echo "Failed to write $RIGHT to authorization db"
+            return $EX_NOPERM
+        fi
     else
         echo "No change, $PLUGIN was already ${cmd}d"
     fi
     
-	if [[ "$cmd" == "enable" ]]; then
+    if [[ "$cmd" == "enable" ]]; then
         echo "* Checking script permissions"
         check_script_dir
     fi
