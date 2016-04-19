@@ -49,6 +49,8 @@ Variable | Value | Example
 
 Please note that since the scripts are executing before the session has been fully initialized you can't count on regular shell variables being set to expected values. Notably `$HOME`, `$USER` **are not set** and `$PATH` is **very rudimentary**.
 
+Scripts should return 0 to let the login proceed, or 77 (`EX_NOPERM`) to fail authorization.
+
 
 License
 -------
