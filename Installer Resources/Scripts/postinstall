@@ -4,14 +4,5 @@
 # Configure the authorization db to enable the plugin.
 ./configureplugin.sh enable
 
-# Restart the login window but avoid active user sessions.
-for pid_uid in $(ps -axo pid,uid,args | grep -i "[l]oginwindow.app" | awk '{print $1 "," $2}'); do
-    pid=$(echo "$pid_uid" | cut -d, -f1)
-    uid=$(echo "$pid_uid" | cut -d, -f2)
-    if [[ "$uid" -eq 0 ]]; then
-        kill -HUP "$pid"
-    fi
-done
-
 
 exit 0
